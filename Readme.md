@@ -13,7 +13,7 @@ In this project's context, a scraper is a function such as
     })
 }
 ```
-Generally speaking, the purpose of a scraper is to extract useful data from a website. In this project, a scraper more specifically extracts useful data from a website's DOM tree's snapshot.
+Generally speaking, a scraper extracts useful data from a website. In this project, a scraper more specifically extracts useful data from a website's DOM tree's snapshot.
 
 ### Warning ⚠️🚨
 This project is currently in research/exploration stage. The risk of unexpected behavior is higher than in a typical released product.
