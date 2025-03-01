@@ -1,4 +1,6 @@
-const extractionPrompt = `Your task is to find out which elments on an website could be relavant for a parser. You should output explanations and selectors. If the data structure on the website is repeated multiple times, make sure that the selector matches to all of the elements on the page. Use the variable  \`simpleDocument\` instead of \`document\` for accessing the dom root!
+const getExtractionPrompt = (wishes : string = "") => `Your task is to find out which elements or element groups on an website could be relavant for a parser. You should output names, explanations and selectors. If the desired element on the website is repeated multiple times, make sure that the selector matches to all of the elements on the page. Use the variable  \`simpleDocument\` instead of \`document\` for accessing the dom root!
+
+${ wishes ? `Wishes from user for elements to create an entry for: ${wishes}` : ''}
 
 Example input:
 [HTML sample]
@@ -7,38 +9,47 @@ Example output:
 \`\`\`javascript
 [
 {
-  selectorFn: () => simpleDocument.querySelectorAll('.listing'),
+  name: "Product listings",
+  selector: "simpleDocument.querySelectorAll('.listing')",
   explanation: "All product listings on the page"
 },
 {
-  selectorFn: () => simpleDocument.querySelector('#footer'),
+  name: "Footer",
+  selector: "simpleDocument.querySelector('#footer')",
   explanation "The footer of the page"
 }
 ]
 \`\`\`
 `
 
-import llmApi from '../src/llmApi'
-import { extractJSBlocks, truncate } from '../src/utils'
+import llmApi, { OpenRouterMessage } from '../src/llmApi'
+import { extractJSBlocks, Js_StatementStr, truncate } from '../src/utils'
 import { Page } from 'puppeteer'
 
-type HtmlSegmentSelectorFn = () => NodeListOf<Element> | (Element | null)[] | Element | null
-
 interface HTMLSegmentSelector {
-    selectorFn: HtmlSegmentSelectorFn,
+    name: string,
+    selector: Js_StatementStr,
     explanation: string,
 }
 
-const getHTMLSegmentSelectors = async (html : string) : Promise<HTMLSegmentSelector[]> => {
+const getHTMLSegmentSelectors = async (html : string, wishes : string = "") : Promise<{
+    result: HTMLSegmentSelector[],
+    logs: {
+        messages: OpenRouterMessage[],
+        extractedJSBlocks: string[]
+    }
+}> => {
     console.log('Building selectors for extracting segments from HTML')
 
-    const resultText = await llmApi([{
+    const messages = [{
         role: "developer",
-        content: extractionPrompt
+        content: getExtractionPrompt(wishes)
     }, {
         role: "user",
         content: html
-    }], [], 'google/gemini-2.0-flash-001')
+    }]
+
+    const resultText = await llmApi(messages, messages, 'google/gemini-2.0-flash-001')
 
     const resultBlocks = extractJSBlocks(resultText, 1)
 
@@ -47,12 +58,19 @@ const getHTMLSegmentSelectors = async (html : string) : Promise<HTMLSegmentSelec
 
     console.log('Done building selectors for extracting segments from HTML')
 
-    return jsArrayResult
+    return {
+        result: jsArrayResult,
+        logs: {
+            messages: messages,
+            extractedJSBlocks: resultBlocks
+        }
+    }
 }
 
 export interface HTMLSegment {
+    name: string,
     htmlString: string,
-    selectorFn: HtmlSegmentSelectorFn,
+    selector: Js_StatementStr,
     explanation: string,
 }
 
@@ -60,16 +78,24 @@ const getHTMLSegments = async (page : Page, selectors : HTMLSegmentSelector[]) :
     const htmlStrings : HTMLSegment[] = []
 
     for (const selector of selectors) {
-        const htmlSegmentString = await page.evaluate((selectorFnString) => {
-            let selectorFn : any = undefined
+        const htmlSegmentString = await page.evaluate((selectorJsString) => {
             let elements : any = undefined
 
             try {
-                selectorFn = eval(selectorFnString)
-                elements = selectorFn()
-            } catch(e) {
+                console.log('Evaluating selector function:', selectorJsString)
+                elements = eval(selectorJsString)
+                console.log('got res', elements)
+            } catch(e : any) {
                 console.error('Error evaluating selector function:', e)
-                return `[Error: e.toString()]`
+                return `[Error: ${e.toString()}]`
+            }
+
+            if (elements === null) {
+                return 'null'
+            }
+
+            if (elements === undefined) {
+                return 'undefined'
             }
 
             if (elements instanceof NodeList) {
@@ -91,13 +117,14 @@ const getHTMLSegments = async (page : Page, selectors : HTMLSegmentSelector[]) :
                 return elements.textContent
             }
 
-        }, selector.selectorFn.toString())
+        }, selector.selector)
 
 
         htmlStrings.push({
+            name: selector.name,
             htmlString: htmlSegmentString,
             explanation: selector.explanation,
-            selectorFn: selector.selectorFn,
+            selector: selector.selector,
         })
     }
 
@@ -107,9 +134,15 @@ const getHTMLSegments = async (page : Page, selectors : HTMLSegmentSelector[]) :
 }
 
 
-export default async (page : Page, html : string) : Promise<HTMLSegment[]> => {
-    const selectors = await getHTMLSegmentSelectors(html)
+export default async (page : Page, html : string, wishes : string = "") : Promise<{
+    result: HTMLSegment[],
+    logs: Awaited<ReturnType<typeof getHTMLSegmentSelectors>>['logs']
+}> => {
+    const {result: selectors, logs: segmentLogs} = await getHTMLSegmentSelectors(html, wishes)
     const segments = await getHTMLSegments(page, selectors)
 
-    return segments
+    return {
+        result: segments,
+        logs: segmentLogs
+    }
 }

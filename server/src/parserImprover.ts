@@ -68,7 +68,7 @@ export const doesParserNeedImprovement = async (parser: Parser, result : any) : 
         { role: "user", content: prompt }
     ]
 
-    const debugResult = await llmApi(parser.buildingMessages, parser.buildingMessages, 'anthropic/claude-3.5-sonnet:floor')
+    const debugResult = await llmApi(parser.buildingMessages, parser.buildingMessages, 'anthropic/claude-3.5-sonnet')
 
     if (debugResult.includes('[NEEDS A FIX]')) {
         return true
@@ -94,7 +94,7 @@ export const getDebugPartialStatements = async (parser: Parser) : Promise<Js_Sta
     const respText = await llmApi([
         { role: "system", content: prompt },
         { role: "assistant", content: parser.parser }
-    ], [], 'anthropic/claude-3.5-sonnet:floor')
+    ], [], 'anthropic/claude-3.5-sonnet')
 
     const resultBlocks = extractJSBlocks(respText, 1)
 
@@ -113,7 +113,7 @@ export const getDebugInfoString = async (parser: Parser, page : Page, partialSta
     for (let evalStr of partialStatements) {
         const actualEval = `evalAndGetResult(${'`'}${evalStr}${'`'})`
         console.log('evaluating:', actualEval)
-        let evaluationResult = await page.evaluate(actualEval)
+        let evaluationResult = await page.evaluate(actualEval.replaceAll('\\', '\\\\')) // for some reason, the backlashes are considered escape characters in the eval function. Therefore escape them once more
         debugInfo.push(`Evaluation of ${evalStr}: ${evaluationResult}`)
     }
 
@@ -132,7 +132,7 @@ export const getImprovedParser = async (parser: Parser, debugInfoString : string
         { role: "user", content: prompt }
     ]
 
-    const respText = await llmApi(parser.buildingMessages, parser.buildingMessages, 'anthropic/claude-3.5-sonnet:floor')
+    const respText = await llmApi(parser.buildingMessages, parser.buildingMessages, 'anthropic/claude-3.5-sonnet')
 
     const resultBlocks = extractJSBlocks(respText, 1)
 

@@ -34,7 +34,7 @@ export const buildInitialParserFromHTMLSegment = async (htmlSegment : HTMLSegmen
         { role: "user", content: htmlSegment.htmlString }
     ]
 
-    const resultText = await llmApi(messagesToSend, messagesToSend, 'anthropic/claude-3.5-sonnet:floor')
+    const resultText = await llmApi(messagesToSend, messagesToSend, 'anthropic/claude-3.5-sonnet')
 
     const resultBlocks = extractJSBlocks(resultText)
 
@@ -56,7 +56,7 @@ export const getDataUsingParser = async (page : Page, parser : Parser) : Promise
     try {
         result = await page.evaluate(parser.parser)
     } catch(e : any) {
-        result = `[Error: e.toString()]`
+        result = `[Error: ${e.toString()}]`
     }
 
     console.log('Got parser result:', result)
@@ -80,7 +80,7 @@ export const buildIteratedParser = async (htmlSegment : HTMLSegment, page : Page
         await improveParserAuto(parser, page)
     }
 
-    console.log('Final parser from iteration process: ', parser)
+    // console.log('Final parser from iteration process: ', parser)
 
     return parser
 }

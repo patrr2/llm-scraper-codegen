@@ -48,7 +48,9 @@ export const evalAndGetResult = (script : Js_StatementStr) => {
     }
   
     try {
+      console.log('Evaluating string: ', script)
       let elOrAny = eval(script)
+      console.log('Got resp: ', elOrAny)
   
       if (elOrAny instanceof NodeList) {
         let arr : any[] = Array.from(elOrAny)
