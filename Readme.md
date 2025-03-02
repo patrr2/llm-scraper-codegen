@@ -23,12 +23,12 @@ This project is currently in research/exploration stage. The risk of unexpected 
 2. run `pnpm i` in `server/` and `simplify-dom/`
 3. run `npm run build` in `simplify-dom/`
 4. in `server/` copy and fill `.env.example` to `.env`
-5. run `server/test/testBench.ts` with for example `ts-node` (run from `server/`)
+5. run `server/cli.ts` with for example `ts-node` (run from `server/`)
 
-This will use approximately $0.03-$0.20 of OpenRouter credits, depending on how many improvement iterations the script makes.
+This will use approximately $0.06-$0.30 of OpenRouter credits, depending on how many improvement iterations the script makes.
 
 ## See it in action
-The file `usage-example.ts` will generate a parser for stackoverflow.com's front page. Here is the output from running the function:
+The script `usage-example.ts` will generate a parser for stackoverflow.com's front page. Here is the output from running the function:
 
 ```javascript
 (() => {
