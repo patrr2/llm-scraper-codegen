@@ -623,70 +623,107 @@ Element.prototype.deepCloneWithReferences = function() {
 Element.prototype.deepCloneWithReferencesAndShadows = function() {
     let clone = this.cloneNode(true) as Element;
 
-    // Function to recursively clone shadow roots
+    // Function to recursively clone shadow roots with stack safety
     const cloneShadowRoots = (originalNode: Node, clonedNode: Node) => {
-        if (originalNode instanceof Element && clonedNode instanceof Element) {
-            const originalShadowRoot = originalNode.shadowRoot;
-            if (originalShadowRoot) {
-                if (!clonedNode.shadowRoot) {
-                    // Create a new shadow root on the cloned element with the same mode
-                    const clonedShadowRoot = clonedNode.attachShadow({ mode: originalShadowRoot.mode });
-
-                    for (let ogChild of Array.from(originalShadowRoot.childNodes)) {
-                        const cloned = ogChild.cloneNode(true);
-                        clonedShadowRoot.appendChild(cloned);
+        // Use a stack-based approach instead of recursion
+        const nodePairs = [{original: originalNode, clone: clonedNode}];
+        
+        while (nodePairs.length > 0) {
+            const {original, clone} = nodePairs.pop()!;
+            
+            if (original instanceof Element && clone instanceof Element) {
+                const originalShadowRoot = original.shadowRoot;
+                if (originalShadowRoot) {
+                    if (!clone.shadowRoot) {
+                        // Create a new shadow root on the cloned element with the same mode
+                        const clonedShadowRoot = clone.attachShadow({ mode: originalShadowRoot.mode });
+                        
+                        // Clone all child nodes from the original shadow root
+                        Array.from(originalShadowRoot.childNodes).forEach(ogChild => {
+                            const cloned = ogChild.cloneNode(true);
+                            clonedShadowRoot.appendChild(cloned);
+                        });
+                        
+                        // Queue up shadow root children for processing
+                        Array.from(originalShadowRoot.children).forEach((child, i) => {
+                            if (clonedShadowRoot.children[i]) {
+                                nodePairs.push({
+                                    original: child, 
+                                    clone: clonedShadowRoot.children[i]
+                                });
+                            }
+                        });
+                    } else {
+                        console.log('warning, shadow root already exists in clone unexpectedly');
                     }
-
-                    for (let i = 0; i < originalShadowRoot.children.length; i++) {
-                        cloneShadowRoots(originalShadowRoot.children[i], clonedShadowRoot.children[i]);
-                    }
-                } else {
-                    console.log('warning, shadow root already exists in clone unexpectedly')
                 }
             }
-        }
-
-        // Process child nodes recursively to handle nested elements
-        const originalChildren = originalNode.childNodes;
-        const clonedChildren = clonedNode.childNodes;
-        for (let i = 0; i < originalChildren.length; i++) {
-            cloneShadowRoots(originalChildren[i], clonedChildren[i]);
+            
+            // Queue up regular children for processing
+            if (original.childNodes.length > 0) {
+                Array.from(original.childNodes).forEach((child, i) => {
+                    if (clone.childNodes[i]) {
+                        nodePairs.push({
+                            original: child,
+                            clone: clone.childNodes[i]
+                        });
+                    }
+                });
+            }
         }
     };
 
     // Clone shadow roots starting from the root elements
     cloneShadowRoots(this, clone);
-
+    
+    // Add references using a non-recursive approach
     const addReferences = () => {
-        // Traverse nodes including those in shadow roots
-        const getOrderedNodeList = (element: Node): Node[] => {
-            let allNodes: Node[] = [element];
-            // Add all child nodes
-            for (const child of Array.from(element.childNodes)) {
-                allNodes.push(...getOrderedNodeList(child));
+        const originalNodes: Node[] = [];
+        const clonedNodes: Node[] = [];
+        
+        // Traverse the original tree non-recursively
+        const traverseTree = (rootOriginal: Node, rootClone: Node) => {
+            const stack = [{original: rootOriginal, clone: rootClone}];
+            
+            while (stack.length > 0) {
+                const {original, clone} = stack.pop()!;
+                
+                originalNodes.push(original);
+                clonedNodes.push(clone);
+                
+                // If the node is an element with a shadow root, process the shadow root
+                if (original instanceof Element && clone instanceof Element) {
+                    if (original.shadowRoot && clone.shadowRoot) {
+                        stack.push({
+                            original: original.shadowRoot,
+                            clone: clone.shadowRoot
+                        });
+                    }
+                }
+                
+                // Process children in reverse order (since we're using a stack)
+                const originalChildren = Array.from(original.childNodes).reverse();
+                const clonedChildren = Array.from(clone.childNodes).reverse();
+                
+                for (let i = 0; i < originalChildren.length; i++) {
+                    stack.push({
+                        original: originalChildren[i],
+                        clone: clonedChildren[i]
+                    });
+                }
             }
-            // If element is an Element, add its shadow root subtree
-            if (element instanceof Element && element.shadowRoot) {
-                allNodes.push(...getOrderedNodeList(element.shadowRoot));
-            }
-            return allNodes;
         };
-
-        const originalNodes = getOrderedNodeList(this);
-        const clonedNodes = getOrderedNodeList(clone);
-
-        if (originalNodes.length !== clonedNodes.length) {
-            throw new Error('Mismatch in node counts after cloning');
-        }
-
+        
+        traverseTree(this, clone);
+        
         // Assign original references to cloned nodes
         for (let i = 0; i < originalNodes.length; i++) {
-            clonedNodes[i].originalNode = originalNodes[i];
+            (clonedNodes[i] as any).originalNode = originalNodes[i];
         }
     };
-
+    
     addReferences();
-
+    
     return clone;
 };
 
